@@ -122,14 +122,95 @@
         background: #5dff9a;
         color: #06210f;
       }
+      #fs {
+        position: fixed;
+        top: calc(8px + env(safe-area-inset-top, 0px));
+        right: calc(10px + env(safe-area-inset-right, 0px));
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        border: 2px solid var(--bd);
+        background: var(--btn);
+        color: var(--fg);
+        font-size: 20px;
+        padding: 0;
+      }
+      #toast {
+        position: fixed;
+        top: 56px;
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: 80%;
+        padding: 8px 14px;
+        border-radius: 12px;
+        background: var(--ov);
+        font-size: 13px;
+        text-align: center;
+        display: none;
+      }
+      #rot {
+        position: fixed;
+        inset: 0;
+        z-index: 5;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        background: var(--ov);
+        text-align: center;
+        padding: 24px;
+      }
+      #rot h2,
+      #rot p {
+        margin: 0;
+      }
+      @media (orientation: portrait) and (pointer: coarse) {
+        #rot:not(.off) {
+          display: flex;
+        }
+      }
+      .ph {
+        width: 46px;
+        height: 80px;
+        border: 4px solid var(--fg);
+        border-radius: 10px;
+        animation: tilt 2.4s ease-in-out infinite;
+      }
+      @keyframes tilt {
+        0%,
+        25% {
+          transform: rotate(0);
+        }
+        60%,
+        100% {
+          transform: rotate(-90deg);
+        }
+      }
+      #rok {
+        padding: 10px 22px;
+        font: 600 14px system-ui;
+        border-radius: 20px;
+        border: 2px solid var(--bd);
+        background: transparent;
+        color: var(--fg);
+      }
     </style>
   </head>
   <body>
     <canvas id="c"></canvas>
     <div id="hud">Front</div>
-    <button class="b" id="lL" aria-label="Lane left"><span>◀</span>LEFT</button>
+    <button id="fs" aria-label="Toggle full screen">⛶</button>
+    <div id="toast"></div>
+    <div id="rot">
+      <div class="ph"></div>
+      <h2>Rotate your phone</h2>
+      <p>Turn to landscape for the best view of the road and cockpit.</p>
+      <button id="rok">Continue anyway</button>
+    </div>
+    <button class="b" id="lL" aria-label="Lane left"><span>◀</span>LANE</button>
     <button class="b" id="lR" aria-label="Lane right">
-      <span>▶</span>RIGHT
+      <span>▶</span>LANE
     </button>
     <button class="b" id="bk" aria-label="Brake"><span>■</span>BRAKE</button>
     <button class="b" id="gs" aria-label="Accelerate"><span>▲</span>GAS</button>
@@ -302,6 +383,58 @@
             m = new THREE.Mesh(new THREE.ConeGeometry(130, h, 5), mm);
           m.position.set(Math.sin(a) * 700, h / 2, Math.cos(a) * 700);
           mts.add(m);
+        }
+
+        /* ---------- Billboards (placeholder ads: replace AD entries with real creatives later) ---------- */
+        function adTex(bg, fg, t, s) {
+          const c = document.createElement("canvas");
+          c.width = 512;
+          c.height = 256;
+          const x = c.getContext("2d");
+          x.fillStyle = bg;
+          x.fillRect(0, 0, 512, 256);
+          x.strokeStyle = fg;
+          x.lineWidth = 8;
+          x.strokeRect(10, 10, 492, 236);
+          x.fillStyle = fg;
+          x.textAlign = "center";
+          x.font = "bold 48px sans-serif";
+          x.fillText(t, 256, 125);
+          x.font = "26px sans-serif";
+          x.fillText(s, 256, 180);
+          return new THREE.MeshBasicMaterial({
+            map: new THREE.CanvasTexture(c),
+          });
+        }
+        const AD = [
+          adTex(
+            "#c23b22",
+            "#ffffff",
+            "YOUR AD HERE",
+            "Advertise: ads@example.com",
+          ),
+          adTex("#2a5db0", "#ffe45c", "BILLBOARD", "Premium roadside slot"),
+          adTex(
+            "#1f7a45",
+            "#ffffff",
+            "SPACE AVAILABLE",
+            "Reach drivers in real time",
+          ),
+          adTex("#222222", "#5dff9a", "YOUR BRAND", "Placeholder creative"),
+        ];
+        const BB = [],
+          pole = M(0x777777),
+          frm = M(0x2b2b2b);
+        for (let i = 0; i < 10; i++) {
+          const g = new THREE.Group();
+          [-2.2, 2.2].forEach((x) => box(0.3, 5, 0.3, pole, x, 2.5, 0, g));
+          box(6.4, 3.4, 0.3, frm, 0, 6.2, 0, g);
+          const p = new THREE.Mesh(new THREE.PlaneGeometry(6, 3), AD[0]);
+          p.position.set(0, 6.2, 0.17);
+          g.add(p);
+          g.userData.p = p;
+          S.add(g);
+          BB.push(g);
         }
 
         /* ---------- NPC vehicles ---------- */
@@ -693,10 +826,10 @@
           if (k === "s" || k === "arrowdown" || k === " ") kb.b = 0;
         });
         ["pointerup", "keydown"].forEach((t) => addEventListener(t, initAudio));
-        $("go").addEventListener(
-          "click",
-          () => ($("intro").style.display = "none"),
-        );
+        $("go").addEventListener("click", () => {
+          $("intro").style.display = "none";
+          if (matchMedia("(pointer:coarse)").matches && !fsEl()) goFS();
+        });
         let sx = 0,
           sy = 0;
         const ray = new THREE.Raycaster(),
@@ -712,8 +845,7 @@
             look = Math.max(
               -1,
               Math.min(1, look + (dx > 0 ? -1 : 1) * SWIPE_DIR),
-            );
-          // swipe right → look left
+            ); // swipe right → look left
           else if (Math.hypot(dx, dy) < 12) tap(e);
         });
         function tap(e) {
@@ -738,6 +870,50 @@
           drawRadio();
           if (b < 3) tune();
         }
+        const de = document.documentElement,
+          fsEl = () =>
+            document.fullscreenElement || document.webkitFullscreenElement;
+        function toast(m) {
+          const t = $("toast");
+          t.textContent = m;
+          t.style.display = "block";
+          clearTimeout(toast.h);
+          toast.h = setTimeout(() => (t.style.display = "none"), 4000);
+        }
+        function goFS() {
+          const rq = de.requestFullscreen || de.webkitRequestFullscreen;
+          if (fsEl()) {
+            (document.exitFullscreen || document.webkitExitFullscreen).call(
+              document,
+            );
+            return;
+          }
+          if (!rq) {
+            toast(
+              "Full screen isn’t supported in this browser. On iPhone: Share → Add to Home Screen, then open the game from the icon.",
+            );
+            return;
+          }
+          Promise.resolve(rq.call(de))
+            .then(() => {
+              try {
+                screen.orientation.lock("landscape").catch(() => {});
+              } catch (e) {}
+            })
+            .catch(() =>
+              toast(
+                "Full screen was blocked. Try opening the game link directly in your browser.",
+              ),
+            );
+        }
+        $("fs").addEventListener("click", goFS);
+        $("rok").addEventListener("click", () => $("rot").classList.add("off"));
+        ["fullscreenchange", "webkitfullscreenchange"].forEach((t) =>
+          document.addEventListener(t, () => {
+            $("fs").textContent = fsEl() ? "✕" : "⛶";
+            rs();
+          }),
+        );
         function rs() {
           const w = innerWidth,
             h = innerHeight;
@@ -828,14 +1004,25 @@
             for (let s = 0; s < 2; s++) {
               const k = R3 - i + 4,
                 g = trees[i * 2 + s],
-                sc = 0.8 + hs(k * 7 + s) * 0.9;
-              g.position.set(
-                (s ? 1 : -1) * (9 + hs(k + s * 99) * 14),
-                0,
-                k * 30 + hs(k * 3 + s) * 20,
-              );
+                sc = 0.8 + hs(k * 7 + s) * 0.9,
+                z = k * 30 + hs(k * 3 + s) * 20,
+                jb = Math.round(z / 120);
+              g.position.set((s ? 1 : -1) * (9 + hs(k + s * 99) * 14), 0, z);
               g.scale.set(sc, sc, sc);
-            }
+              g.visible = !(
+                (jb & 1 ? 1 : -1) === (s ? 1 : -1) &&
+                Math.abs(z - jb * 120) < 12
+              );
+            } // trees skip the clearing around a billboard
+          const Rb = Math.round(pz / 120);
+          BB.forEach((g, i) => {
+            const j = Rb - i + 2,
+              sdv = j & 1 ? 1 : -1;
+            g.position.set(sdv * 11.5, 0, j * 120);
+            g.rotation.y = -sdv * 0.5;
+            const m = AD[((j % 4) + 4) % 4];
+            if (g.userData.p.material !== m) g.userData.p.material = m;
+          }); // one billboard every 120 m, alternating sides
           yaw += ((-look * Math.PI) / 2 - yaw) * Math.min(1, dt * 9);
           head.rotation.y = yaw;
           shake = Math.max(0, shake - dt * 2.5);
